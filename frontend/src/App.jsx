@@ -1,8 +1,16 @@
 import React, { useState, useEffect, useRef, memo } from 'react';
-import { Shield, ShieldAlert, Send, Activity, Lock, AlertTriangle, Paperclip, CheckCircle, Server, FileText, Mic, Trash2, LayoutDashboard, History, Info, BookOpen, Terminal, ChevronRight, Menu, Download, Search, UserCircle, Eye, EyeOff } from 'lucide-react';
+import { 
+  Shield, ShieldAlert, Send, Activity, Lock, AlertTriangle, Paperclip, 
+  CheckCircle, Server, FileText, Mic, Trash2, LayoutDashboard, History, 
+  Info, BookOpen, Terminal, ChevronRight, Menu, Download, Search, 
+  UserCircle, Eye, EyeOff, Users, ArrowLeft, RefreshCw 
+} from 'lucide-react';
 import { io } from 'socket.io-client';
 import axios from 'axios';
 import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+
+import AdminPortal from './components/AdminPortal';
+import EmployeeAnalyticsDashboard from './components/EmployeeAnalyticsDashboard';
 
 const socket = io('http://localhost:4000');
 
@@ -129,7 +137,6 @@ const MessageBubble = memo(({ msg, isProtectedPanel }) => {
   );
 });
 
-
 // ---------------------------------------------------------
 // MAIN APP COMPONENT
 // ---------------------------------------------------------
@@ -137,6 +144,8 @@ const MessageBubble = memo(({ msg, isProtectedPanel }) => {
 function App() {
   const [activeTab, setActiveTab] = useState('Overview');
   const [selectedReportId, setSelectedReportId] = useState(null);
+  const [selectedReportLog, setSelectedReportLog] = useState(null);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState(null);
   
   // Auth State
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -146,6 +155,7 @@ function App() {
   const [authName, setAuthName] = useState('');
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
+  const [authDepartment, setAuthDepartment] = useState('Engineering');
   const [authError, setAuthError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   
@@ -161,27 +171,40 @@ function App() {
   const protEndRef = useRef(null);
   const fileInputRef = useRef(null);
 
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('token');
+    return token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+  };
+
   const refreshHistory = () => {
-    axios.get('http://localhost:4000/api/history').then(res => {
-      const logs = res.data;
-      setDbHistory(logs);
-      setUnprotectedHistory(logs.filter(log => !log.isProtected));
-      setProtectedHistory(logs.filter(log => log.isProtected));
-    }).catch(err => console.error("Failed to load history from DB", err));
+    axios.get('http://localhost:4000/api/history', getAuthHeaders())
+      .then(res => {
+        const logs = res.data;
+        setDbHistory(logs);
+        setUnprotectedHistory(logs.filter(log => !log.isProtected));
+        setProtectedHistory(logs.filter(log => log.isProtected));
+      })
+      .catch(err => console.error("Failed to load history from DB", err));
   };
 
   useEffect(() => {
     const savedToken = localStorage.getItem('token');
     const savedUser = localStorage.getItem('user');
     if (savedToken && savedUser) {
-      setIsLoggedIn(true);
-      setUser(JSON.parse(savedUser));
+      try {
+        const parsed = JSON.parse(savedUser);
+        setIsLoggedIn(true);
+        setUser(parsed);
+      } catch (e) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+      }
     }
 
     refreshHistory();
     socket.on('threat_alert', (data) => {
       setAlerts(prev => [...prev, data]);
-      setTimeout(() => setAlerts(prev => prev.filter(a => a !== data)), 5000);
+      setTimeout(() => setAlerts(prev => prev.filter(a => a !== data)), 6000);
     });
     return () => socket.off('threat_alert');
   }, []);
@@ -201,11 +224,11 @@ function App() {
     setUnprotectedHistory(prev => [...prev, userMsgUnprot]);
     setProtectedHistory(prev => [...prev, userMsgProt]);
 
-    const reqUnprotected = axios.post('http://localhost:4000/api/chat', { prompt: currentPrompt, isProtected: false })
+    const reqUnprotected = axios.post('http://localhost:4000/api/chat', { prompt: currentPrompt, isProtected: false }, getAuthHeaders())
       .then(res => setUnprotectedHistory(prev => [...prev, { role: 'assistant', content: res.data.response, isProtected: false }]))
       .catch(() => setUnprotectedHistory(prev => [...prev, { role: 'system', content: 'Connection Error.', isError: true, isProtected: false }]));
 
-    const reqProtected = axios.post('http://localhost:4000/api/chat', { prompt: currentPrompt, isProtected: true })
+    const reqProtected = axios.post('http://localhost:4000/api/chat', { prompt: currentPrompt, isProtected: true }, getAuthHeaders())
       .then(res => setProtectedHistory(prev => [...prev, { role: 'assistant', content: res.data.response, security: res.data.security, isProtected: true }]))
       .catch(err => {
         if (err.response && err.response.status === 403) {
@@ -217,7 +240,7 @@ function App() {
 
     await Promise.all([reqUnprotected, reqProtected]);
     setIsProcessing(false);
-    refreshHistory(); // Pull latest DB IDs
+    refreshHistory();
   };
 
   const clearConsole = () => {
@@ -234,7 +257,7 @@ function App() {
       <div className="flex flex-wrap items-center justify-center gap-6">
         <a href="#" className="hover:text-purple-600 transition-colors">Privacy Policy</a>
         <a href="#" className="hover:text-purple-600 transition-colors">Terms of Service</a>
-        <a href="#" className="hover:text-purple-600 transition-colors">Contact</a>
+        <a href="#" className="hover:text-purple-600 transition-colors">Compliance RMF</a>
         <span className="text-black/40">© {new Date().getFullYear()} Aegis Security</span>
       </div>
     </footer>
@@ -278,7 +301,7 @@ function App() {
         <div className="flex-[2] bg-white rounded-[24px] neo-border neo-shadow p-8 md:p-12">
           <div className="inline-flex items-center gap-2 bg-purple-100 neo-border px-4 py-2 rounded-full mb-8 neo-shadow-sm font-bold text-sm">
             <CheckCircle className="w-4 h-4 fill-purple-300" />
-            Verified for 2026 Security Audits
+            Verified for 2026 Enterprise Security Audits
           </div>
           
           <h1 className="font-heading text-5xl md:text-7xl font-black mb-6 leading-tight tracking-tight">
@@ -286,37 +309,53 @@ function App() {
           </h1>
           
           <p className="text-lg text-black/70 font-medium mb-10 max-w-xl leading-relaxed">
-            Get ready for Enterprise Security with live guardrails, advanced telemetry, prompt injection detection, and detailed forensic reporting. Use these Aegis tools to connect threats, vulnerabilities, and defense-in-depth reasoning for your organization.
+            Enterprise Generative AI Guardrails with live payload interception, evidence-based threat detection, employee telemetry audits, and comprehensive administrative analytics.
           </p>
           
           <div className="flex flex-wrap gap-4 font-heading font-bold">
-            <button className="bg-black text-white px-6 py-3 rounded-full neo-hover transition-transform border-2 border-transparent">
-              unlock all features
-            </button>
+            {user?.role === 'admin' ? (
+              <button 
+                onClick={() => { setSelectedEmployeeId(null); setActiveTab('Admin Portal'); }} 
+                className="bg-black text-white px-6 py-3 rounded-full neo-hover transition-transform border-2 border-transparent flex items-center gap-2"
+              >
+                <Shield className="w-4 h-4" /> Open Admin Portal
+              </button>
+            ) : (
+              <button 
+                onClick={() => setActiveTab('Console')} 
+                className="bg-black text-white px-6 py-3 rounded-full neo-hover transition-transform border-2 border-transparent"
+              >
+                Launch Diagnostic Console
+              </button>
+            )}
             <button onClick={() => setActiveTab('Console')} className="bg-purple-100 text-black px-6 py-3 rounded-full neo-border neo-hover neo-shadow-sm transition-transform">
-              start diagnostic
-            </button>
-            <button className="bg-blue-100 text-black px-6 py-3 rounded-full neo-border neo-hover neo-shadow-sm transition-transform">
-              for enterprise
+              Interactive Test
             </button>
           </div>
         </div>
 
         {/* Right Nav Stack */}
         <div className="flex-1 bg-cyan-100 rounded-[24px] neo-border neo-shadow p-6 md:p-8 flex flex-col">
-          <h3 className="font-heading font-black text-lg mb-6 uppercase tracking-widest text-black/80">Jump into a resource</h3>
+          <h3 className="font-heading font-black text-lg mb-6 uppercase tracking-widest text-black/80">Navigation Matrix</h3>
           
           <div className="flex flex-col gap-4">
             {[
               { id: 'Console', icon: Terminal, title: 'Live Console', count: 'Active →' },
-              { id: 'Dashboard', icon: LayoutDashboard, title: 'Dashboard', count: 'Analytics →' },
-              { id: 'History', icon: History, title: 'Scan History', count: `${dbHistory.length} logs →` },
+              ...(user?.role === 'admin' ? [
+                { id: 'Admin Portal', icon: Users, title: 'Employee Directory', count: 'Admin →' },
+                { id: 'Dashboard', icon: LayoutDashboard, title: 'System Analytics', count: 'Overview →' }
+              ] : [
+                { id: 'Dashboard', icon: LayoutDashboard, title: 'My Analytics', count: 'Insights →' },
+                { id: 'History', icon: History, title: 'My Scan History', count: `${dbHistory.length} logs →` }
+              ]),
               { id: 'Guidance', icon: BookOpen, title: 'Guidance Docs', count: 'Read →' },
-              { id: 'About', icon: Info, title: 'About Aegis', count: 'Learn →' },
             ].map(item => (
               <button 
                 key={item.id}
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => {
+                  if (item.id === 'Admin Portal') setSelectedEmployeeId(null);
+                  setActiveTab(item.id);
+                }}
                 className="bg-white neo-border rounded-xl p-4 flex items-center justify-between neo-hover neo-shadow-sm transition-transform group"
               >
                 <div className="flex items-center gap-3 font-bold text-lg">
@@ -335,9 +374,14 @@ function App() {
   );
 
   const renderConsole = () => (
-    <div className="flex-1 flex flex-col min-h-0 bg-slate-50 max-w-7xl mx-auto w-full p-6">
+    <div className="flex-1 flex flex-col min-h-0 bg-slate-50 max-w-7xl mx-auto w-full p-4 md:p-6">
       <div className="flex items-center justify-between mb-4 gap-2">
-        <h2 className="font-heading font-black text-2xl md:text-3xl truncate">Live Security Console</h2>
+        <div>
+          <h2 className="font-heading font-black text-2xl md:text-3xl truncate">Live Security Console</h2>
+          <p className="text-xs text-black/50 font-bold">
+            {user ? `Logged in as ${user.name} (${user.employeeId || user.role})` : 'Running in Guest Mode'}
+          </p>
+        </div>
         <button onClick={clearConsole} className="bg-white neo-border px-3 md:px-4 py-2 rounded-full font-bold text-xs md:text-sm neo-hover neo-shadow-sm flex items-center gap-2 shrink-0">
           <Trash2 className="w-4 h-4"/> Clear Chat
         </button>
@@ -348,9 +392,9 @@ function App() {
         <div className="flex-1 bg-white neo-border neo-shadow rounded-2xl flex flex-col overflow-hidden">
           <div className="bg-slate-100 p-4 border-b-2 border-black flex items-center gap-3 shrink-0">
             <div className="bg-white neo-border p-1.5 rounded-lg"><Server className="w-5 h-5" /></div>
-            <h2 className="font-heading font-bold text-lg">Standard API</h2>
+            <h2 className="font-heading font-bold text-lg">Standard API (Unprotected)</h2>
           </div>
-          <div className="flex-1 overflow-y-auto p-6 bg-white">
+          <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-white">
             {unprotectedHistory.map((msg, idx) => <MessageBubble key={idx} msg={msg} isProtectedPanel={false} />)}
             {isProcessing && <div className="text-sm text-black/50 font-bold font-mono">Processing payload...</div>}
             <div ref={unprotEndRef} />
@@ -361,9 +405,9 @@ function App() {
         <div className="flex-1 bg-white neo-border neo-shadow rounded-2xl flex flex-col overflow-hidden">
           <div className="bg-emerald-100 p-4 border-b-2 border-black flex items-center gap-3 shrink-0">
             <div className="bg-white neo-border p-1.5 rounded-lg"><Lock className="w-5 h-5 text-emerald-600" /></div>
-            <h2 className="font-heading font-bold text-lg text-emerald-950">Aegis Guardrail</h2>
+            <h2 className="font-heading font-bold text-lg text-emerald-950">Aegis Guardrail (Protected)</h2>
           </div>
-          <div className="flex-1 overflow-y-auto p-6 bg-white">
+          <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-white">
             {protectedHistory.map((msg, idx) => <MessageBubble key={idx} msg={msg} isProtectedPanel={true} />)}
             {isProcessing && <div className="text-sm text-emerald-600/50 font-bold font-mono">Analyzing telemetry...</div>}
             <div ref={protEndRef} />
@@ -380,7 +424,7 @@ function App() {
           value={prompt} 
           onChange={(e) => setPrompt(e.target.value)} 
           onKeyDown={(e) => { if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); handleSend();} }} 
-          placeholder="Enter payload..." 
+          placeholder="Enter prompt to evaluate through Aegis Guardrail..." 
           className="flex-1 bg-transparent border-none focus:outline-none text-black placeholder-black/40 text-sm md:text-lg font-medium resize-none py-3 px-2 md:px-4 min-h-[50px] max-h-[150px]" 
           disabled={isProcessing} 
           rows={1}
@@ -412,7 +456,19 @@ function App() {
 
     return (
       <div className="flex-1 p-6 md:p-12 overflow-y-auto max-w-7xl mx-auto w-full">
-        <h2 className="font-heading font-black text-3xl md:text-4xl mb-8">Analytics Dashboard</h2>
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h2 className="font-heading font-black text-3xl md:text-4xl">
+              {user?.role === 'admin' ? 'System Analytics Dashboard' : 'My Security Analytics'}
+            </h2>
+            <p className="text-xs text-black/50 font-bold mt-1">
+              {user?.role === 'admin' ? 'Global telemetry across organization' : `Scoped to employee profile: ${user?.name}`}
+            </p>
+          </div>
+          <button onClick={refreshHistory} className="bg-white neo-border px-4 py-2 rounded-xl font-bold text-xs neo-hover flex items-center gap-2">
+            <RefreshCw className="w-3.5 h-3.5" /> Refresh
+          </button>
+        </div>
         
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-10">
           {[ 
@@ -496,7 +552,11 @@ function App() {
                   </td>
                   <td className="p-5 text-black/70 truncate max-w-xs font-mono font-medium">{log.security.original_prompt}</td>
                   <td className="p-5 text-right">
-                    <button onClick={() => { setSelectedReportId(log._id); setActiveTab('Report'); }} className="bg-white neo-border p-2 rounded-full neo-hover neo-shadow-sm">
+                    <button onClick={() => { 
+                      setSelectedReportId(log._id); 
+                      setSelectedReportLog(log);
+                      setActiveTab('Report'); 
+                    }} className="bg-white neo-border p-2 rounded-full neo-hover neo-shadow-sm">
                       <ChevronRight className="w-5 h-5"/>
                     </button>
                   </td>
@@ -511,8 +571,9 @@ function App() {
   };
 
   const renderReport = () => {
-    const log = dbHistory.find(h => h._id === selectedReportId);
-    if (!log) return <div className="p-12 text-center font-bold">No report selected.</div>;
+    // Look up log from state or dbHistory
+    const log = selectedReportLog || dbHistory.find(h => h._id === selectedReportId);
+    if (!log || !log.security) return <div className="p-12 text-center font-bold">No report selected.</div>;
     const s = log.security;
     
     const groupedThreats = Object.entries(s.threat_reasons?.reduce((acc, r) => {
@@ -530,6 +591,7 @@ AEGIS SECURITY FORENSIC REPORT
 ========================================
 Report ID: ${log._id}
 Timestamp: ${new Date(log.timestamp).toLocaleString()}
+Employee:  ${log.userName || 'Unassigned'} (${log.employeeId || 'N/A'})
 
 [ OVERVIEW ]
 Risk Level:   ${s.risk_level} (${(s.risk_score*100).toFixed(1)}%) - Estimated security risk
@@ -565,7 +627,18 @@ Generated by Aegis.AI Security Console
     return (
       <div className="flex-1 p-6 md:p-12 overflow-y-auto max-w-5xl mx-auto w-full">
         <div className="flex justify-between items-center mb-8">
-          <button onClick={() => setActiveTab('History')} className="flex items-center gap-2 font-bold hover:underline">← Back to History</button>
+          <button 
+            onClick={() => {
+              if (selectedEmployeeId && user?.role === 'admin') {
+                setActiveTab('Admin Portal');
+              } else {
+                setActiveTab('History');
+              }
+            }} 
+            className="flex items-center gap-2 font-bold hover:underline"
+          >
+            ← Back to {selectedEmployeeId && user?.role === 'admin' ? 'Employee Analytics' : 'History'}
+          </button>
           <button onClick={downloadReport} className="bg-emerald-100 text-emerald-800 neo-border neo-shadow-sm neo-hover px-6 py-2 rounded-full font-bold flex items-center gap-2">
             <Download className="w-4 h-4" /> Export Report
           </button>
@@ -619,6 +692,12 @@ Generated by Aegis.AI Security Console
                <div className="text-black/50 font-bold text-xs uppercase tracking-widest mb-1">Timestamp:</div>
                <div className="font-mono font-medium text-sm">{new Date(log.timestamp).toLocaleString()}</div>
              </div>
+             {log.userName && (
+               <div className="flex-1">
+                 <div className="text-black/50 font-bold text-xs uppercase tracking-widest mb-1">Originating Employee:</div>
+                 <div className="font-mono font-bold text-sm text-purple-900">{log.userName} ({log.employeeId || 'N/A'})</div>
+               </div>
+             )}
           </div>
 
           <h3 className="font-heading font-bold text-lg mb-4 border-b border-black/10 pb-3">PROMPT ANALYSIS</h3>
@@ -692,7 +771,7 @@ Generated by Aegis.AI Security Console
       const endpoint = authMode === 'login' ? '/api/auth/login' : '/api/auth/register';
       const payload = authMode === 'login' 
         ? { email: authEmail, password: authPassword }
-        : { name: authName, email: authEmail, password: authPassword };
+        : { name: authName, email: authEmail, password: authPassword, department: authDepartment };
       
       const res = await axios.post(`http://localhost:4000${endpoint}`, payload);
       
@@ -703,8 +782,15 @@ Generated by Aegis.AI Security Console
       setIsLoggedIn(true);
       setShowAuthModal(false);
       
-      // Reset fields
+      // Navigate to appropriate tab based on role
+      if (res.data.user.role === 'admin') {
+        setActiveTab('Admin Portal');
+      } else {
+        setActiveTab('Overview');
+      }
+      
       setAuthPassword('');
+      refreshHistory();
     } catch (err) {
       setAuthError(err.response?.data?.error || 'Authentication failed');
     }
@@ -715,6 +801,9 @@ Generated by Aegis.AI Security Console
     localStorage.removeItem('user');
     setUser(null);
     setIsLoggedIn(false);
+    setSelectedEmployeeId(null);
+    setActiveTab('Overview');
+    refreshHistory();
   };
 
   const renderAuthModal = () => {
@@ -729,9 +818,9 @@ Generated by Aegis.AI Security Console
             <div className="bg-purple-100 w-16 h-16 rounded-full neo-border flex items-center justify-center mx-auto mb-4">
               <Shield className="w-8 h-8 fill-purple-300" />
             </div>
-            <h2 className="font-heading font-black text-3xl mb-2">{authMode === 'login' ? 'Welcome Back' : 'Create Account'}</h2>
+            <h2 className="font-heading font-black text-3xl mb-2">{authMode === 'login' ? 'Aegis Security Sign In' : 'Register Employee Account'}</h2>
             <p className="text-black/60 font-bold text-sm">
-              {authMode === 'login' ? 'Log in to access your security console.' : 'Sign up to secure your organization.'}
+              {authMode === 'login' ? 'Sign in with your administrator or employee credentials.' : 'Create an employee profile to access protected AI features.'}
             </p>
           </div>
 
@@ -739,15 +828,28 @@ Generated by Aegis.AI Security Console
 
           <form onSubmit={handleAuth} className="flex flex-col gap-4">
             {authMode === 'signup' && (
-              <div>
-                <label className="block text-xs font-black tracking-widest text-black/60 mb-2 uppercase">Full Name</label>
-                <input type="text" required value={authName} onChange={e => setAuthName(e.target.value)} placeholder="Mohd Ali Khan" className="w-full bg-slate-50 neo-border rounded-xl px-4 py-3 font-medium outline-none focus:ring-2 ring-black" />
-              </div>
+              <>
+                <div>
+                  <label className="block text-xs font-black tracking-widest text-black/60 mb-2 uppercase">Full Name</label>
+                  <input type="text" required value={authName} onChange={e => setAuthName(e.target.value)} placeholder="Sarah Connor" className="w-full bg-slate-50 neo-border rounded-xl px-4 py-3 font-medium outline-none focus:ring-2 ring-black" />
+                </div>
+                <div>
+                  <label className="block text-xs font-black tracking-widest text-black/60 mb-2 uppercase">Department</label>
+                  <select value={authDepartment} onChange={e => setAuthDepartment(e.target.value)} className="w-full bg-slate-50 neo-border rounded-xl px-4 py-3 font-medium outline-none focus:ring-2 ring-black">
+                    <option value="AI Research & Platform">AI Research & Platform</option>
+                    <option value="Software Engineering">Software Engineering</option>
+                    <option value="Financial Operations">Financial Operations</option>
+                    <option value="Product Management">Product Management</option>
+                    <option value="Cybersecurity & Governance">Cybersecurity & Governance</option>
+                  </select>
+                </div>
+              </>
             )}
             <div>
               <label className="block text-xs font-black tracking-widest text-black/60 mb-2 uppercase">Email Address</label>
-              <input type="email" required value={authEmail} onChange={e => setAuthEmail(e.target.value)} placeholder="admin@aegis.ai" className="w-full bg-slate-50 neo-border rounded-xl px-4 py-3 font-medium outline-none focus:ring-2 ring-black" />
+              <input type="email" required value={authEmail} onChange={e => setAuthEmail(e.target.value)} placeholder="admin@aegis.ai or employee@aegis.ai" className="w-full bg-slate-50 neo-border rounded-xl px-4 py-3 font-medium outline-none focus:ring-2 ring-black" />
             </div>
+
             <div>
               <label className="block text-xs font-black tracking-widest text-black/60 mb-2 uppercase">Password</label>
               <div className="relative flex items-center">
@@ -758,16 +860,41 @@ Generated by Aegis.AI Security Console
               </div>
             </div>
             
-            <button type="submit" className="w-full bg-black text-white py-3 rounded-xl font-heading font-black text-lg mt-4 neo-hover border-2 border-transparent">
-              {authMode === 'login' ? 'LOG IN' : 'SIGN UP'}
+            <button type="submit" className="w-full bg-black text-white py-3 rounded-xl font-heading font-black text-lg mt-2 neo-hover border-2 border-transparent">
+              {authMode === 'login' ? 'SIGN IN' : 'CREATE ACCOUNT'}
             </button>
           </form>
 
-          <div className="mt-6 text-center font-bold text-sm">
+          {/* Quick Demo Credentials Assistant */}
+          <div className="mt-4 p-3 bg-purple-50 rounded-xl border border-purple-200 text-xs">
+            <span className="font-bold text-purple-900 block mb-1">🔑 Quick Demo Credentials:</span>
+            <div className="flex flex-col gap-1 text-[11px] font-mono text-black/70">
+              <div>
+                <button 
+                  type="button" 
+                  onClick={() => { setAuthEmail('admin@aegis.ai'); setAuthPassword('Admin@Aegis2026!'); }}
+                  className="text-purple-700 underline font-bold"
+                >
+                  Admin:
+                </button> admin@aegis.ai / Admin@Aegis2026!
+              </div>
+              <div>
+                <button 
+                  type="button" 
+                  onClick={() => { setAuthEmail('sarah.connor@aegis.ai'); setAuthPassword('Employee@2026!'); }}
+                  className="text-purple-700 underline font-bold"
+                >
+                  Employee:
+                </button> sarah.connor@aegis.ai / Employee@2026!
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 text-center font-bold text-sm">
             {authMode === 'login' ? (
-              <span className="text-black/60">Don't have an account? <button onClick={() => { setAuthMode('signup'); setAuthError(''); }} className="text-purple-600 hover:underline">Sign up</button></span>
+              <span className="text-black/60">New employee? <button onClick={() => { setAuthMode('signup'); setAuthError(''); }} className="text-purple-600 hover:underline">Sign up</button></span>
             ) : (
-              <span className="text-black/60">Already have an account? <button onClick={() => { setAuthMode('login'); setAuthError(''); }} className="text-purple-600 hover:underline">Log in</button></span>
+              <span className="text-black/60">Already registered? <button onClick={() => { setAuthMode('login'); setAuthError(''); }} className="text-purple-600 hover:underline">Log in</button></span>
             )}
           </div>
         </div>
@@ -775,16 +902,26 @@ Generated by Aegis.AI Security Console
     );
   };
 
-  // ---------------------------------------------------------
-  // TOP NAVIGATION BAR (NEO-BRUTALISM)
-  // ---------------------------------------------------------
+  // Determine available tabs based on role
+  const getNavTabs = () => {
+    if (user?.role === 'admin') {
+      return ['Overview', 'Console', 'Admin Portal', 'Dashboard'];
+    }
+    return ['Overview', 'Console', 'Dashboard', 'History'];
+  };
 
   return (
     <div className="h-[100dvh] w-full flex flex-col bg-slate-50 text-slate-900 overflow-hidden">
       
-      {/* Top Purple Banner */}
-      <div className="bg-purple-200 text-center py-2 text-sm font-bold border-b-2 border-black">
-        Aegis is live. <a href="#" className="underline hover:text-purple-700">See what's new for the 2026 security audits →</a>
+      {/* Top Banner */}
+      <div className="bg-purple-200 text-center py-2 text-xs md:text-sm font-bold border-b-2 border-black flex items-center justify-center gap-2">
+        <span>Aegis Enterprise Guardrail is active.</span>
+        <span className="hidden sm:inline">NIST AI RMF & OWASP LLM Top 10 Telemetry Stream</span>
+        {user?.role === 'admin' && (
+          <span className="bg-red-600 text-white px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ml-2">
+            ADMINISTRATOR PRIVILEGES ENGAGED
+          </span>
+        )}
       </div>
 
       {/* Main Header */}
@@ -797,14 +934,17 @@ Generated by Aegis.AI Security Console
             <span className="font-heading font-black text-xl tracking-tight">aegis.ai</span>
           </div>
           
-          <nav className="flex items-center gap-4 md:gap-6 font-bold text-xs sm:text-sm overflow-x-auto scrollbar-hide w-full sm:w-auto pb-1 sm:pb-0 justify-center">
-            {['Overview', 'Console', 'Dashboard', 'History'].map(tab => (
+          <nav className="flex items-center gap-3 md:gap-6 font-bold text-xs sm:text-sm overflow-x-auto scrollbar-hide w-full sm:w-auto pb-1 sm:pb-0 justify-center">
+            {getNavTabs().map(tab => (
               <button 
                 key={tab} 
-                onClick={() => setActiveTab(tab)}
+                onClick={() => {
+                  if (tab === 'Admin Portal') setSelectedEmployeeId(null);
+                  setActiveTab(tab);
+                }}
                 className={`hover:text-purple-600 transition-colors whitespace-nowrap ${activeTab === tab ? 'border-b-2 border-black pb-1' : ''}`}
               >
-                {tab}
+                {tab === 'Dashboard' && user?.role === 'admin' ? 'System Analytics' : tab}
               </button>
             ))}
           </nav>
@@ -814,7 +954,7 @@ Generated by Aegis.AI Security Console
         <div className="flex flex-wrap items-center justify-center gap-3 w-full lg:w-auto">
           <div className="hidden xl:flex items-center bg-white neo-border rounded-full px-4 py-2 focus-within:ring-2 ring-black">
             <Search className="w-4 h-4 text-black/50 mr-2" />
-            <input type="text" placeholder="search logs, policies..." className="border-none outline-none text-sm font-bold w-64" />
+            <input type="text" placeholder="search telemetry..." className="border-none outline-none text-sm font-bold w-48" />
             <div className="bg-slate-200 text-xs px-1.5 py-0.5 rounded border border-black font-mono">⌘K</div>
           </div>
           
@@ -825,19 +965,26 @@ Generated by Aegis.AI Security Console
           {!isLoggedIn ? (
             <div className="flex items-center gap-2">
               <button onClick={() => { setAuthMode('login'); setShowAuthModal(true); }} className="flex items-center gap-1 md:gap-2 font-bold text-xs md:text-sm hover:text-purple-600 px-2 md:px-3">
-                <UserCircle className="w-4 h-4 md:w-5 md:h-5" /> log in
+                <UserCircle className="w-4 h-4 md:w-5 md:h-5" /> sign in
               </button>
               <button onClick={() => { setAuthMode('signup'); setShowAuthModal(true); }} className="bg-black text-white neo-hover border-2 border-transparent px-4 md:px-5 py-2 rounded-full font-bold text-xs md:text-sm">
-                sign up
+                register
               </button>
             </div>
           ) : (
-            <div className="flex items-center gap-2 md:gap-4 pl-0 sm:pl-4 sm:border-l-2 border-black/10">
-              <div className="flex items-center gap-1 md:gap-2 font-bold text-xs md:text-sm truncate max-w-[120px] md:max-w-xs">
-                <div className="bg-purple-200 p-1 md:p-1.5 rounded-full neo-border shrink-0"><UserCircle className="w-3.5 h-3.5 md:w-4 md:h-4 text-purple-800" /></div>
-                <span className="truncate">{user?.name || 'Mohd Ali Khan'}</span>
+            <div className="flex items-center gap-2 md:gap-3 pl-0 sm:pl-3 sm:border-l-2 border-black/10">
+              <div className="flex items-center gap-2 font-bold text-xs md:text-sm truncate">
+                <div className={`p-1.5 rounded-full neo-border shrink-0 ${user.role === 'admin' ? 'bg-red-200 text-red-900' : 'bg-purple-200 text-purple-800'}`}>
+                  {user.role === 'admin' ? <ShieldAlert className="w-4 h-4" /> : <UserCircle className="w-4 h-4" />}
+                </div>
+                <div className="flex flex-col text-left">
+                  <span className="font-heading font-black text-xs leading-none">{user.name}</span>
+                  <span className="text-[10px] text-black/50 font-mono">
+                    {user.role === 'admin' ? 'ADMINISTRATOR' : `${user.employeeId || 'EMP'} • ${user.department}`}
+                  </span>
+                </div>
               </div>
-              <button onClick={handleLogout} className="text-xs font-bold text-red-600 hover:bg-red-50 px-2 md:px-3 py-1 md:py-1.5 rounded-full neo-border transition-colors shrink-0">
+              <button onClick={handleLogout} className="text-xs font-bold text-red-600 hover:bg-red-50 px-2.5 py-1 rounded-full neo-border transition-colors shrink-0">
                 Sign Out
               </button>
             </div>
@@ -855,6 +1002,31 @@ Generated by Aegis.AI Security Console
         {activeTab === 'Dashboard' && renderDashboard()}
         {activeTab === 'History' && renderHistory()}
         {activeTab === 'Report' && renderReport()}
+        
+        {/* Admin Portal Tab */}
+        {activeTab === 'Admin Portal' && (
+          selectedEmployeeId ? (
+            <EmployeeAnalyticsDashboard 
+              employeeId={selectedEmployeeId}
+              onBack={() => setSelectedEmployeeId(null)}
+              onViewReport={(reportId) => {
+                setSelectedReportId(reportId);
+                // Fetch report from employee history
+                axios.get(`http://localhost:4000/api/admin/employees/${selectedEmployeeId}/history`, getAuthHeaders())
+                  .then(res => {
+                    const found = res.data.logs?.find(l => l._id === reportId);
+                    if (found) setSelectedReportLog(found);
+                    setActiveTab('Report');
+                  })
+                  .catch(() => setActiveTab('Report'));
+              }}
+            />
+          ) : (
+            <AdminPortal 
+              onSelectEmployee={(empId) => setSelectedEmployeeId(empId)}
+            />
+          )
+        )}
       </main>
 
     </div>
