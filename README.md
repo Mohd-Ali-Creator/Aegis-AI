@@ -39,7 +39,7 @@ Conversely, if an over-reactive firewall blocks any query containing words like 
          ├────────────────────────────────────────┬────────────────────────────────────────┐
          ▼                                        ▼                                        ▼
     [ALLOW / WARN]                           [SANITIZE]                                 [BLOCK]
-   Direct to LLM                       Contextual Safe Rewrite                   Halt & Log Incident
+     Direct to LLM                      Contextual Safe Rewrite                   Halt & Log Incident
 ```
 
 Aegis intercepts the prompt, evaluates it across **12+ security dimensions**, computes an evidence-grounded risk score with zero hallucinations, and applies adaptive mitigation in **under 30 milliseconds**.
@@ -55,44 +55,45 @@ Aegis intercepts the prompt, evaluates it across **12+ security dimensions**, co
 
 ---
 
-## 3. High-Level System Architecture
+## 3. High-Level System Architecture & Flow Diagram
 
 Aegis AI employs a decoupled microservices architecture designed for sub-100ms latency, zero-trust security boundaries, and complete horizontal scalability.
 
 ```mermaid
 flowchart TB
-    subgraph ClientLayer ["1. Client Interaction Layer (Neo-Brutalist SPA)"]
-        UserBrowser["User / Employee Browser (React 19 + Vite)"]
-        AdminBrowser["Administrator Security Console (Directory & Analytics)"]
+    subgraph ClientLayer ["1. Client Interaction Layer"]
+        UserBrowser["User / Employee Browser\n(React 19 + Vite SPA)"]
+        AdminBrowser["Administrator Security Console\n(Directory & Analytics)"]
     end
 
-    subgraph GatewayLayer ["2. API Gateway & Governance (Node.js & Socket.io :4000)"]
-        APIGateway["Express API Gateway"]
-        AuthMiddleware["JWT RBAC & Scoping Middleware"]
-        TelemetryBroadcaster["Socket.io Real-Time Alert Engine"]
+    subgraph GatewayLayer ["2. API Gateway & Governance (Port 4000)"]
+        APIGateway["Node.js / Express API Gateway"]
+        AuthMiddleware["JWT Authentication & RBAC Middleware"]
         PolicyEngine["Enforcement & Sanitization Router"]
+        TelemetryBroadcaster["Socket.io Real-Time Alert Streamer"]
     end
 
-    subgraph SidecarLayer ["3. Aegis ML Security Sidecar (Python FastAPI :5000)"]
-        SidecarApp["FastAPI Analysis Engine (/analyze)"]
-        PIIScanner["Regex PII Scanner & Auto-Redactor (SSN, Email, Phone)"]
-        HeuristicMatcher["Heuristic Injection Engine (Direct Overrides & Exfil)"]
-        MLEngine["TF-IDF + Logistic Regression Intent Classifier"]
-        MultiModalScanner["Deep Attachment Scanner & URL Sandbox Analyzer"]
-        RiskEngine["Evidence-Grounded Risk & Confidence Calculator"]
+    subgraph SidecarLayer ["3. Aegis ML Security Sidecar (Port 5000)"]
+        SidecarApp["Python FastAPI Service (/analyze)"]
+        PIIScanner["Regex PII Scanner & Redactor\n(SSN, Email, Phone)"]
+        HeuristicMatcher["Heuristic Injection Engine\n(Direct Overrides & Exfil)"]
+        MLEngine["Scikit-Learn ML Classifier\n(TF-IDF + Logistic Regression)"]
+        MultiModalScanner["Deep Attachment Scanner &\nURL Sandbox Analyzer"]
+        RiskEngine["Evidence-Grounded Risk &\nConfidence Calculator"]
     end
 
     subgraph PersistenceLayer ["4. Persistence & External Services"]
-        MongoDB[(MongoDB Atlas / Audit Trail Database)]
-        MockLLM["External / Enterprise Large Language Model"]
+        MongoDB[("MongoDB Database\n(Audit Trail & Telemetry)")]
+        ExternalLLM["Protected Large Language Model\n(Enterprise AI Endpoint)"]
     end
 
-    UserBrowser -->|HTTP REST & WebSockets| APIGateway
-    AdminBrowser -->|Authenticated Admin REST| APIGateway
+    UserBrowser -->|HTTP Chat Request| APIGateway
+    AdminBrowser -->|Authenticated Management API| APIGateway
 
     APIGateway --> AuthMiddleware
     AuthMiddleware --> PolicyEngine
-    PolicyEngine -->|Forward Prompt Payload| SidecarApp
+
+    PolicyEngine -->|Inspect Payload| SidecarApp
 
     SidecarApp --> PIIScanner
     PIIScanner --> HeuristicMatcher
@@ -100,38 +101,87 @@ flowchart TB
     MLEngine --> MultiModalScanner
     MultiModalScanner --> RiskEngine
 
-    RiskEngine -->|JSON Security Telemetry| PolicyEngine
+    RiskEngine -->|Return Telemetry & Decision| PolicyEngine
 
-    PolicyEngine -->|Real-Time Threat Alerts| TelemetryBroadcaster
-    TelemetryBroadcaster -->|Push Alerts| ClientLayer
+    PolicyEngine -->|Threat Alert Event| TelemetryBroadcaster
+    TelemetryBroadcaster -->|Push Live Alert| AdminBrowser
 
-    PolicyEngine -->|Save Scoped Audit Records| MongoDB
-    PolicyEngine -->|If Safe or Sanitized| MockLLM
-    PolicyEngine -->|If Blocked (HTTP 403)| UserBrowser
+    PolicyEngine -->|Persist Audit Record| MongoDB
+    PolicyEngine -->|If Safe or Sanitized| ExternalLLM
+    PolicyEngine -->|If Blocked - HTTP 403| UserBrowser
 ```
 
 ---
 
-## 4. Multi-Layer Security Pipeline & Decision Matrix
+## 4. Multi-Layer Security Pipeline & Decision Working Flow
 
-Every prompt entering Aegis undergoes a rigorous 5-stage evaluation:
+Every prompt entering Aegis undergoes a 5-stage sequential evaluation to guarantee zero false-positive suppression while stopping adversarial exploits.
 
 ```mermaid
 flowchart LR
-    A[Input Payload] --> B[1. PII Redaction]
-    B --> C[2. Heuristic Scanners]
-    C --> D[3. ML Intent Classifier]
-    D --> E[4. Deep File Scanner]
-    E --> F[5. Risk Assessment]
-    F --> G{Decision Engine}
-    G -->|0.0% Risk| H[ALLOWED]
-    G -->|< 40% Risk| I[ALLOWED (Redacted)]
-    G -->|< 70% Risk| J[WARNED]
-    G -->|< 90% Risk| K[SANITIZED (Safe Rewrite)]
-    G -->|>= 90% Risk| L[BLOCKED (Interception)]
+    StartNode["Input Prompt Payload"] --> Step1["1. PII Redaction\n(Email, Phone, SSN)"]
+    Step1 --> Step2["2. Heuristic Scanners\n(Direct Overrides & DB Exploits)"]
+    Step2 --> Step3["3. ML Intent Classifier\n(TF-IDF Semantic Vector)"]
+    Step3 --> Step4["4. Deep File Scanner\n(Indirect File Injections)"]
+    Step4 --> Step5["5. Evidence-Grounded\nRisk Calculator"]
+
+    Step5 --> DecisionBranch{"Risk & Decision Engine"}
+
+    DecisionBranch -->|"Risk: 0.0%"| ActAllow["ALLOW\n(Direct Processing)"]
+    DecisionBranch -->|"Risk: 0.1% - 39.9%"| ActRedact["ALLOW\n(Redacted Tokens)"]
+    DecisionBranch -->|"Risk: 40.0% - 69.9%"| ActWarn["WARN\n(Security Flagged)"]
+    DecisionBranch -->|"Risk: 70.0% - 89.9%"| ActSanitize["SANITIZE\n(Contextual Safe Rewrite)"]
+    DecisionBranch -->|"Risk: 90.0% - 100%"| ActBlock["BLOCK\n(HTTP 403 Interception)"]
 ```
 
-### The 4 Adaptive Enforcement Actions
+---
+
+## 5. End-to-End Request/Response Sequence Flow
+
+Here is the exact lifecycle of an intercepted request from user submission to audit log recording:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Employee as Employee / Client
+    participant GW as Node.js Gateway (:4000)
+    participant SC as Python ML Sidecar (:5000)
+    participant DB as MongoDB Atlas
+    participant LLM as Protected LLM
+
+    Employee->>GW: POST /api/chat { prompt, isProtected: true }
+    Note over GW: Authenticates JWT & attaches Employee Metadata (EMP-1042)
+    GW->>SC: POST /analyze { prompt }
+    
+    rect rgb(240, 248, 255)
+        Note over SC: 1. Regex PII auto-redaction
+        Note over SC: 2. Heuristic injection pattern matching
+        Note over SC: 3. Scikit-learn TF-IDF semantic inference
+        Note over SC: 4. Deep attachment and URL sandbox scan
+        Note over SC: 5. Calculates Evidence-Based Risk & Confidence
+    end
+
+    SC-->>GW: Return GuardrailResponse JSON (Risk, Action, Reasons, Latency)
+
+    alt Action is BLOCKED (Risk >= 90%)
+        GW->>DB: Log Threat Incident (Role: system, Error: true)
+        GW-->>Employee: HTTP 403 Intercepted: Threat Blocked
+    else Action is SANITIZED (Risk 70% - 89%)
+        GW->>DB: Log Sanitized Request & Original Payload
+        GW->>LLM: Forward Safe Contextual Rewrite
+        LLM-->>GW: Return Model Completion
+        GW-->>Employee: HTTP 200 Return Protected Completion + Telemetry
+    else Action is ALLOWED (Risk < 40%)
+        GW->>DB: Log Clean Audit Record
+        GW->>LLM: Forward Original / Redacted Prompt
+        LLM-->>GW: Return Model Completion
+        GW-->>Employee: HTTP 200 Return Clean Completion
+    end
+```
+
+---
+
+## 6. The 4 Adaptive Enforcement Actions
 
 | Action | Risk Range | Description | Example Trigger |
 | :--- | :--- | :--- | :--- |
@@ -142,7 +192,7 @@ flowchart LR
 
 ---
 
-## 5. Technology Stack & Architectural Rationale
+## 7. Technology Stack & Architectural Rationale
 
 | Layer | Technology | Why Chosen? |
 | :--- | :--- | :--- |
@@ -157,7 +207,7 @@ flowchart LR
 
 ---
 
-## 6. Centralized Extensible Security Dimensions Registry
+## 8. Centralized Extensible Security Dimensions Registry
 
 Aegis AI does not constrain security analysis to an arbitrary 4-metric limit. The framework features an extensible registry (`gateway/securityDimensions.js`):
 
@@ -187,43 +237,41 @@ Aegis AI does not constrain security analysis to an arbitrary 4-metric limit. Th
 
 ---
 
-## 7. Role-Based Access Control & User Journeys
+## 9. Role-Based Access Control & User Journeys
 
 Aegis strictly separates administrative governance from individual employee experiences:
 
 ### Journey A: The Administrator Workflow
-```
-[Admin Login] 
-     │
-     ▼
-[Admin Dashboard] ──► (System metrics, total employees, high-risk incident counts)
-     │
-     ▼
-[Employee Directory] ──► (Search by name/email/ID, filter by department, sort by threat velocity)
-     │
-     ▼
-[Select Employee] ──► (e.g. Sarah Connor - EMP-1042)
-     │
-     ▼
-[Employee Analytics Dashboard]
-     ├── Decision Distribution (Pie Chart: Blocked / Sanitized / Warned / Allowed)
-     ├── Security Dimensions Breakdown (Bar Chart across all 12+ active criteria)
-     ├── Historical Threat Velocity (Time-Series Area Chart)
-     └── Filterable Scan History & Reports
-     │
-     ▼
-[Detailed Forensic Report] ──► (Full pipeline trace, grouped indicators, export as .txt)
+
+```mermaid
+flowchart TD
+    AdminLogin["Admin Sign In\n(admin@aegis.ai)"] --> AdminDash["Administrator Dashboard\n(Global System Metrics)"]
+    AdminDash --> EmpDir["Employee Directory\n(Search, Filter & Sort)"]
+    EmpDir --> SelectEmp["Select Employee\n(e.g., Sarah Connor - EMP-1042)"]
+    SelectEmp --> EmpDash["Employee Analytics Dashboard"]
+
+    EmpDash --> PieChart["Decision Distribution\n(Pie Chart)"]
+    EmpDash --> BarChart["Security Dimensions\n(12+ Criteria Bar Chart)"]
+    EmpDash --> AreaChart["Historical Velocity\n(Time-Series Area Chart)"]
+    EmpDash --> ScanHist["Filterable Scan History\n& Reports Table"]
+
+    ScanHist --> Forensics["Detailed Forensic Report\n(Export as .txt)"]
 ```
 
 ### Journey B: The Employee Workflow
-```
-[Employee Login] ──► [Live Security Console] ──► [Submit Prompt] ──► [Real-Time Aegis Interception] ──► [Personal History]
+
+```mermaid
+flowchart TD
+    EmpLogin["Employee Sign In\n(sarah.connor@aegis.ai)"] --> Console["Live Security Diagnostic Console"]
+    Console --> InputPrompt["Submit Prompt with Guardrails"]
+    InputPrompt --> RealtimeGuard["Aegis Interception & Evaluation"]
+    RealtimeGuard --> ScopedHistory["Personal Scan History\n(Strictly Isolated)"]
 ```
 > **Security Isolation**: An employee can *only* view their own prompt history and reports. Attempts to query other employees' records or access `/api/admin/*` are rejected with `HTTP 403 Forbidden`.
 
 ---
 
-## 8. Quick Start & Installation Guide
+## 10. Quick Start & Installation Guide
 
 ### Prerequisites
 * **Node.js** (v18.0.0 or higher)
@@ -275,11 +323,11 @@ cd frontend
 npm install
 npm run dev
 ```
-*Web App Live*: Open **[http://localhost:5173](http://localhost:5173)** in your browser.
+*Web App Live*: Open **[http://localhost:5173](http://localhost:5173/)** in your browser.
 
 ---
 
-## 9. Default Credentials for Testing
+## 11. Default Credentials for Testing
 
 | Role | Email | Password | Assigned Permissions |
 | :--- | :--- | :--- | :--- |
@@ -288,7 +336,7 @@ npm run dev
 
 ---
 
-## 10. Automated Testing & Verification Suite
+## 12. Automated Testing & Verification Suite
 
 Aegis includes automated testing suites for security regression, RBAC, and prompt classification:
 
@@ -308,7 +356,7 @@ node test_sequence.js
 
 ---
 
-## 11. Key Innovations & Achievements
+## 13. Key Innovations & Achievements
 
 1. **Contextual Safe Rewriting**: Rather than unhelpfully rejecting prompts with ambiguous threat indicators, Aegis synthetically sanitizes them into secure, actionable instructions.
 2. **False-Positive Noise Suppression**: Out-of-vocabulary words and benign vocabulary (e.g., *"bypass traffic"*, *"operating system"*) are prevented from triggering false alerts by tying scores to explicit indicators.
@@ -317,7 +365,7 @@ node test_sequence.js
 
 ---
 
-## 12. Project Directory Structure
+## 14. Project Directory Structure
 
 ```text
 aegis-ai/
@@ -347,7 +395,7 @@ aegis-ai/
 
 ---
 
-## 13. License & Authorship
+## 15. License & Authorship
 
 Created & Developed by **Mohd Ali Khan**.  
 Built for trustworthy, privacy-preserving, and attack-resilient Generative AI applications.
